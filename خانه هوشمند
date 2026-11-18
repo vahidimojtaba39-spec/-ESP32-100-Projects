@@ -1,0 +1,84 @@
+# پروژه ۱: کلید/پریز هوشمند Wi-Fi (Smart Switch)
+
+> یک کلید هوشمند برای کنترل لوازم برقی از راه دور با موبایل و زمان‌بندی خودکار، بدون نیاز به هاب مرکزی.
+
+## 📋 فهرست مطالب
+- [کاربرد محصول](#کاربرد-محصول)
+- [قطعات مورد نیاز](#قطعات-مورد-نیاز)
+- [نقشه اتصالات](#نقشه-اتصالات)
+- [کتابخانه‌های نرم‌افزاری](#کتابخانه‌های-نرم‌افزاری)
+- [کد اصلی](#کد-اصلی)
+- [شیوه تست و کارکرد](#شیوه-تست-و-کارکرد)
+
+## 💡 کاربرد محصول
+- روشن و خاموش کردن لامپ یا وسایل برقی از هر جای دنیا با گوشی.
+- تنظیم تایمر (مثلاً روشن شدن لامپ در ساعت ۱۸:۰۰).
+- صرفه‌جویی در مصرف برق با خاموش کردن خودکار وسایل فراموش‌شده.
+
+## 🛒 قطعات مورد نیاز
+| قطعه | تعداد | توضیحات |
+|---|---|---|
+| برد ESP32 (یا ESP32-C3) | ۱ | مغز متفکر دستگاه |
+| ماژول رله ۵ ولت (Relay) | ۱ | برای قطع و وصل جریان ۲۲۰ ولت |
+| ماژول تغذیه (HLK-PM01) | ۱ | تبدیل ۲۲۰ ولت به ۵ ولت (بسیار مهم برای ایمنی) |
+| سیم، جعبه و پریز | - | برای مونتاژ نهایی |
+
+## 🔌 نقشه اتصالات
+- پایه **IN** رله به **GPIO 5** در ESP32 متصل می‌شود.
+- پایه **VCC** رله به **5V** در ESP32 (یا خروجی ۵ولت ماژول تغذیه).
+- پایه **GND** رله به **GND** مشترک متصل می‌شود.
+- سیم فاز (۲۲۰ ولت) بعد از عبور از ماژول تغذیه، به پایه Common رله و سپس به لامپ متصل می‌شود. (⚠️ هشدار: کار با برق ۲۲۰ ولت بسیار خطرناک است، حتماً از فرد متخصص کمک بگیرید).
+
+## 📚 کتابخانه‌های نرم‌افزاری
+- `WiFi.h` (پیش‌فرض در آردوینو IDE)
+- `WebServer.h` (پیش‌فرض در آردوینو IDE)
+
+## 💻 کد اصلی
+```cpp
+#include <WiFi.h>
+#include <WebServer.h>
+
+const char* ssid = "نام_وای_فای_شما";
+const char* password = "رمز_وای_فای_شما";
+
+WebServer server(80);
+const int relayPin = 5; 
+bool relayState = false;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, LOW); // رله در ابتدا خاموش است
+
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("در حال اتصال به وای‌فای...");
+  }
+  Serial.println("متصل شد!");
+  Serial.print("آدرس IP: ");
+  Serial.println(WiFi.localIP());
+
+  // صفحه وب ساده برای کنترل
+  server.on("/", []() {
+    String html = "<html><body style='text-align:center; font-family:tahoma;'><h1>کنترل کلید هوشمند</h1>";
+    html += "<form action='/toggle' method='GET'>";
+    html += "<button style='padding:20px; font-size:20px;'>تغییر وضعیت (روشن/خاموش)</button>";
+    html += "</form></body></html>";
+    server.send(200, "text/html", html);
+  });
+
+  // مسیر تغییر وضعیت
+  server.on("/toggle", []() {
+    relayState = !relayState;
+    digitalWrite(relayPin, relayState ? HIGH : LOW);
+    server.sendHeader("Location", "/");
+    server.send(303);
+  });
+
+  server.begin();
+}
+
+void loop() {
+  server.handleClient();
+}
